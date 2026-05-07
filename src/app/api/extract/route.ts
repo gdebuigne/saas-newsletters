@@ -6,14 +6,14 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024  // 5MB (Claude Vision limit)
 
 function apiKeyError() {
   return NextResponse.json(
-    { error: "Anthropic API key not configured. Add ANTHROPIC_API_KEY=sk-ant-... to your .env.local file and restart the dev server." },
+    { error: "Mistral API key not configured. Add MISTRAL_API_KEY=... to your .env.local file and restart the dev server." },
     { status: 503 }
   )
 }
 
 function isKeyMissing() {
-  const key = process.env.ANTHROPIC_API_KEY
-  return !key || key.startsWith("sk-ant-your")
+  const key = process.env.MISTRAL_API_KEY
+  return !key || key.trim().length < 8
 }
 
 export async function POST(req: NextRequest) {

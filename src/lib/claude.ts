@@ -1,15 +1,18 @@
-import Anthropic from "@anthropic-ai/sdk"
+import OpenAI from "openai"
 import { buildSystemPrompt, buildUserPrompt } from "./prompts"
 import type { Network, Tone, Format, Proposal, GeneratedPost } from "@/types"
 
-const MODEL = "claude-sonnet-4-20250514"
+const TEXT_MODEL = "mistral-large-latest"
 
-function getClient(): Anthropic {
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key || key.startsWith("sk-ant-your")) {
-    throw new Error("ANTHROPIC_API_KEY is not configured. Add your key to .env.local and restart the server.")
+function getClient(): OpenAI {
+  const key = process.env.MISTRAL_API_KEY
+  if (!key || key.trim().length < 8) {
+    throw new Error("MISTRAL_API_KEY is not configured. Add it to .env.local and restart the server.")
   }
-  return new Anthropic({ apiKey: key })
+  return new OpenAI({
+    apiKey: key,
+    baseURL: "https://api.mistral.ai/v1",
+  })
 }
 
 function parseProposals(raw: string, network: Network, tone: Tone, format: Format): Proposal[] {
@@ -22,13 +25,12 @@ function parseProposals(raw: string, network: Network, tone: Tone, format: Forma
   try {
     parsed = JSON.parse(cleaned)
   } catch {
-    // Claude sometimes returns a JSON object inside extra text — try to extract it
     const match = cleaned.match(/\[[\s\S]+\]/)
-    if (!match) throw new Error("Claude returned invalid JSON. Try again.")
+    if (!match) throw new Error("The AI returned an invalid response. Please try again.")
     parsed = JSON.parse(match[0])
   }
 
-  if (!Array.isArray(parsed)) throw new Error("Expected JSON array from Claude")
+  if (!Array.isArray(parsed)) throw new Error("Expected JSON array from AI")
 
   return parsed.map((item: { angle: string; post: GeneratedPost }, idx: number) => {
     const post = item.post as GeneratedPost
@@ -52,12 +54,12 @@ function parseProposals(raw: string, network: Network, tone: Tone, format: Forma
   })
 }
 
-function handleAnthropicError(err: unknown): never {
+function handleApiError(err: unknown): never {
   const e = err as { status?: number; message?: string }
-  if (e.status === 401) throw new Error("Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.local.")
-  if (e.status === 429) throw new Error("Anthropic rate limit reached. Wait a moment and try again.")
-  if (e.status === 529) throw new Error("Anthropic API is overloaded. Try again in a few seconds.")
-  throw new Error(e.message ?? "Claude API error")
+  if (e.status === 401) throw new Error("Invalid Mistral API key. Check MISTRAL_API_KEY in .env.local.")
+  if (e.status === 429) throw new Error("Rate limit reached. Wait a moment and try again.")
+  if (e.status === 529 || e.status === 503) throw new Error("Mistral API is temporarily unavailable. Try again in a few seconds.")
+  throw new Error(e.message ?? "AI generation failed")
 }
 
 export async function generatePosts({
@@ -80,20 +82,22 @@ export async function generatePosts({
   const userPrompt = buildUserPrompt(content, sourceUrl)
 
   try {
-    const message = await client.messages.create({
-      model: MODEL,
+    const completion = await client.chat.completions.create({
+      model: TEXT_MODEL,
       max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
     })
 
-    const textContent = message.content.find((c) => c.type === "text")
-    if (!textContent || textContent.type !== "text") throw new Error("No text response from Claude")
+    const text = completion.choices[0]?.message?.content
+    if (!text) throw new Error("No response from AI")
 
-    return parseProposals(textContent.text, network, tone, format)
+    return parseProposals(text, network, tone, format)
   } catch (err) {
-    if ((err as Error).message.includes(".env.local")) throw err
-    if ((err as Error).message.includes("JSON")) throw err
-    handleAnthropicError(err)
+    const msg = (err as Error).message ?? ""
+    if (msg.includes(".env.local") || msg.includes("JSON") || msg.includes("invalid response")) throw err
+    handleApiError(err)
   }
 }

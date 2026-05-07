@@ -7,14 +7,14 @@ const VALID_TONES = ["professional", "inspiring", "humorous", "educational", "pr
 const VALID_FORMATS = ["classic", "carousel", "thread", "bullets", "narrative"]
 
 function isKeyMissing() {
-  const key = process.env.ANTHROPIC_API_KEY
-  return !key || key.startsWith("sk-ant-your")
+  const key = process.env.MISTRAL_API_KEY
+  return !key || key.trim().length < 8
 }
 
 export async function POST(req: NextRequest) {
   if (isKeyMissing()) {
     return NextResponse.json(
-      { error: "Anthropic API key not configured. Add ANTHROPIC_API_KEY=sk-ant-... to .env.local and restart the dev server." },
+      { error: "Mistral API key not configured. Add MISTRAL_API_KEY=... to .env.local and restart the dev server." },
       { status: 503 }
     )
   }

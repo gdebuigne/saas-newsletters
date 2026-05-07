@@ -1,17 +1,20 @@
 import * as cheerio from "cheerio"
-import Anthropic from "@anthropic-ai/sdk"
+import OpenAI from "openai"
 import type { ExtractResult } from "@/types"
 
-const IMAGE_ANALYSIS_MODEL = "claude-sonnet-4-20250514"
+const VISION_MODEL = "pixtral-large-latest"
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const
 type SupportedImageType = typeof SUPPORTED_IMAGE_TYPES[number]
 
-function getAnthropicClient(): Anthropic {
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key || key.startsWith("sk-ant-your")) {
-    throw new Error("ANTHROPIC_API_KEY is not configured. Add your key to .env.local and restart the server.")
+function getMistralClient(): OpenAI {
+  const key = process.env.MISTRAL_API_KEY
+  if (!key || key.trim().length < 8) {
+    throw new Error("MISTRAL_API_KEY is not configured. Add it to .env.local and restart the server.")
   }
-  return new Anthropic({ apiKey: key })
+  return new OpenAI({
+    apiKey: key,
+    baseURL: "https://api.mistral.ai/v1",
+  })
 }
 
 const UNWANTED_SELECTORS = [
@@ -37,12 +40,11 @@ function extractTextFromHtml(html: string, url: string): ExtractResult {
     ""
 
   UNWANTED_SELECTORS.forEach((sel) => {
-    try { $(sel).remove() } catch { /* ignore invalid selectors */ }
+    try { $(sel).remove() } catch { /* ignore */ }
   })
 
   const contentSelectors = ["article", "main", "[role='main']", ".post-content", ".article-content", ".entry-content", ".content", "body"]
   let bodyText = ""
-
   for (const sel of contentSelectors) {
     const el = $(sel).first()
     if (el.length) {
@@ -84,7 +86,6 @@ export async function extractFromUrl(url: string): Promise<ExtractResult> {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
       },
     })
 
@@ -159,20 +160,20 @@ export function isSupportedImageType(mimeType: string): mimeType is SupportedIma
 }
 
 export async function extractFromImage(buffer: Buffer, mimeType: SupportedImageType): Promise<ExtractResult> {
-  const client = getAnthropicClient()
+  const client = getMistralClient()
   const base64 = buffer.toString("base64")
 
   try {
-    const message = await client.messages.create({
-      model: IMAGE_ANALYSIS_MODEL,
+    const completion = await client.chat.completions.create({
+      model: VISION_MODEL,
       max_tokens: 1024,
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "image",
-              source: { type: "base64", media_type: mimeType, data: base64 },
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64}` },
             },
             {
               type: "text",
@@ -188,7 +189,7 @@ CONTENT: [detailed description with ALL visible text, context, key takeaways, st
       ],
     })
 
-    const text = message.content.find((c) => c.type === "text")?.text ?? ""
+    const text = completion.choices[0]?.message?.content ?? ""
 
     const titleMatch = text.match(/^TITLE:\s*(.+)$/m)
     const summaryMatch = text.match(/^SUMMARY:\s*(.+)$/m)
@@ -202,10 +203,8 @@ CONTENT: [detailed description with ALL visible text, context, key takeaways, st
     return { title, summary, body, wordCount }
   } catch (err) {
     const e = err as { status?: number; message?: string }
-    if (e.status === 401 || e.message?.includes(".env.local")) {
-      throw new Error("Invalid Anthropic API key. Add ANTHROPIC_API_KEY=sk-ant-... to .env.local and restart the dev server.")
-    }
-    if (e.status === 429) throw new Error("Anthropic rate limit reached. Wait a moment and try again.")
+    if (e.status === 401) throw new Error("Invalid Mistral API key. Check MISTRAL_API_KEY in .env.local.")
+    if (e.status === 429) throw new Error("Rate limit reached. Wait a moment and try again.")
     throw new Error(e.message ?? "Image analysis failed")
   }
 }
