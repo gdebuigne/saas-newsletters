@@ -1,6 +1,7 @@
 export type Network = "linkedin" | "instagram" | "twitter" | "threads" | "facebook"
 export type Tone = "professional" | "inspiring" | "humorous" | "educational" | "provocative" | "storytelling"
 export type Format = "classic" | "carousel" | "thread" | "bullets" | "narrative"
+export type Language = "fr" | "en"
 
 export interface ExtractResult {
   title: string
@@ -49,6 +50,7 @@ export interface GenerateRequest {
   tone: Tone
   format: Format
   count: number
+  language: Language
 }
 
 export interface GenerateResponse {

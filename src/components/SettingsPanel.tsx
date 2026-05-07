@@ -3,7 +3,7 @@
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import type { Network, Tone, Format } from "@/types"
+import type { Network, Tone, Format, Language } from "@/types"
 
 const NETWORKS: { id: Network; label: string; color: string; bg: string; icon: string }[] = [
   { id: "linkedin", label: "LinkedIn", color: "text-[#0A66C2]", bg: "bg-[#E8F0FA] border-[#0A66C2]/30", icon: "in" },
@@ -47,8 +47,13 @@ const FORMATS_BY_NETWORK: Record<Network, { id: Format; label: string }[]> = {
   ],
 }
 
+const LANGUAGES: { id: Language; label: string; flag: string }[] = [
+  { id: "fr", label: "Français", flag: "🇫🇷" },
+  { id: "en", label: "English", flag: "🇬🇧" },
+]
+
 export function SettingsPanel() {
-  const { network, tone, format, count, setNetwork, setTone, setFormat, setCount } = useAppStore()
+  const { network, tone, format, count, language, setNetwork, setTone, setFormat, setCount, setLanguage } = useAppStore()
 
   const availableFormats = FORMATS_BY_NETWORK[network]
   const validFormat = availableFormats.some((f) => f.id === format) ? format : availableFormats[0].id
@@ -61,6 +66,32 @@ export function SettingsPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Language */}
+      <div>
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 block">
+          Langue
+        </label>
+        <div className="flex gap-2">
+          {LANGUAGES.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => setLanguage(l.id)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border text-sm font-medium transition-all duration-200",
+                language === l.id
+                  ? "bg-foreground text-background border-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+              )}
+            >
+              <span>{l.flag}</span>
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Separator />
+
       {/* Network */}
       <div>
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 block">

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Copy, Check, Edit2, RefreshCw, Loader2, LayoutGrid, ChevronDown } from "lucide-react"
+import { Copy, Check, Edit2, RefreshCw, Loader2, LayoutGrid, ChevronDown, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -84,6 +84,36 @@ export function PostCard({ proposal, index }: PostCardProps) {
       ].join("\n\n")
     }
     return post.content
+  }
+
+  const getPublishUrl = () => {
+    const text = encodeURIComponent(getFullText())
+    const tags = !isCarousel && post.hashtags?.length
+      ? post.hashtags.map((h) => h.replace(/^#/, "")).join(",")
+      : ""
+    switch (proposal.network) {
+      case "twitter":
+        return `https://twitter.com/intent/tweet?text=${text}${tags ? `&hashtags=${tags}` : ""}`
+      case "threads":
+        return `https://www.threads.net/intent/post?text=${text}`
+      case "linkedin":
+        return "https://www.linkedin.com/post/new/"
+      case "facebook":
+        return "https://www.facebook.com/"
+      case "instagram":
+        return "https://www.instagram.com/"
+      default:
+        return "#"
+    }
+  }
+
+  const handlePublish = async () => {
+    try {
+      await navigator.clipboard.writeText(getFullText())
+    } catch { /* clipboard not critical for publish */ }
+    window.open(getPublishUrl(), "_blank", "noopener,noreferrer")
+    const needsManualPaste = ["linkedin", "facebook", "instagram"].includes(proposal.network)
+    if (needsManualPaste) toast.success("Text copied — paste it into the composer!")
   }
 
   const handleCopy = async () => {
@@ -235,40 +265,50 @@ export function PostCard({ proposal, index }: PostCardProps) {
 
       {/* Actions */}
       {!isEditing && (
-        <div className="flex items-center gap-1.5 px-4 pb-4 pt-1">
+        <div className="space-y-1.5 px-4 pb-4 pt-1">
           <Button
-            variant="outline"
             size="sm"
-            onClick={handleCopy}
-            className="flex-1 gap-1.5 h-8 text-xs font-medium"
+            onClick={handlePublish}
+            className="w-full gap-1.5 h-8 text-xs font-semibold bg-[#2D5BE3] hover:bg-[#2348C7] text-white border-0"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied!" : "Copy"}
+            <Send className="w-3.5 h-3.5" />
+            Publish on {NETWORK_STYLES[proposal.network].label}
           </Button>
-          {!isCarousel && (
+          <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              onClick={handleEditStart}
+              onClick={handleCopy}
               className="flex-1 gap-1.5 h-8 text-xs font-medium"
             >
-              <Edit2 className="w-3.5 h-3.5" />
-              Edit
+              {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? "Copied!" : "Copy"}
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRegenerate}
-            disabled={isRegenerating}
-            className="flex-1 gap-1.5 h-8 text-xs font-medium"
-          >
-            {isRegenerating
-              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              : <RefreshCw className="w-3.5 h-3.5" />
-            }
-            Regen
-          </Button>
+            {!isCarousel && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEditStart}
+                className="flex-1 gap-1.5 h-8 text-xs font-medium"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Edit
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+              className="flex-1 gap-1.5 h-8 text-xs font-medium"
+            >
+              {isRegenerating
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <RefreshCw className="w-3.5 h-3.5" />
+              }
+              Regen
+            </Button>
+          </div>
         </div>
       )}
 

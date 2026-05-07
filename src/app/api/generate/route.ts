@@ -5,6 +5,7 @@ import type { GenerateRequest } from "@/types"
 const VALID_NETWORKS = ["linkedin", "instagram", "twitter", "threads", "facebook"]
 const VALID_TONES = ["professional", "inspiring", "humorous", "educational", "provocative", "storytelling"]
 const VALID_FORMATS = ["classic", "carousel", "thread", "bullets", "narrative"]
+const VALID_LANGUAGES = ["fr", "en"]
 
 function isKeyMissing() {
   const key = process.env.MISTRAL_API_KEY
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { content, sourceUrl, network, tone, format, count } = body
+  const { content, sourceUrl, network, tone, format, count, language } = body
 
   if (!content || typeof content !== "string" || content.trim().length < 50) {
     return NextResponse.json({ error: "Content is too short (minimum 50 characters)" }, { status: 400 })
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Invalid format. Must be one of: ${VALID_FORMATS.join(", ")}` }, { status: 400 })
   }
 
+  const resolvedLanguage = VALID_LANGUAGES.includes(language) ? language : "fr"
   const proposalCount = Math.min(Math.max(Number(count) || 3, 3), 5)
 
   try {
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest) {
       tone,
       format,
       count: proposalCount,
+      language: resolvedLanguage,
     })
 
     return NextResponse.json({ proposals })

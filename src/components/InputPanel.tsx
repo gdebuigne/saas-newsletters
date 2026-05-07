@@ -4,10 +4,9 @@ import { useState, useRef, useCallback } from "react"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
-import { Link, Upload, FileText, AlertCircle, CheckCircle2, X, Loader2, ImageIcon } from "lucide-react"
+import { Link, FileText, AlertCircle, CheckCircle2, X, Loader2, ImageIcon } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import type { ExtractResult } from "@/types"
@@ -184,12 +183,11 @@ function DropZone({
 }
 
 export function InputPanel() {
-  const [urlInput, setUrlInput] = useState("")
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | undefined>()
 
-  const { extracted, isExtracting, extractError, setExtracted, setIsExtracting, setExtractError } = useAppStore()
+  const { extracted, isExtracting, extractError, urlInput, setUrlInput, setExtracted, setIsExtracting, setExtractError } = useAppStore()
 
   const uploadFile = useCallback(
     async (file: File, formData: FormData) => {
@@ -212,28 +210,6 @@ export function InputPanel() {
     },
     [setExtracted, setIsExtracting, setExtractError]
   )
-
-  const handleExtractUrl = async () => {
-    if (!urlInput.trim()) return
-    setIsExtracting(true)
-    setExtractError(null)
-    try {
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlInput.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Extraction failed")
-      setExtracted(data as ExtractResult)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Could not extract content"
-      setExtractError(msg)
-      toast.error(msg)
-    } finally {
-      setIsExtracting(false)
-    }
-  }
 
   const handlePdfFile = useCallback(async (file: File) => {
     if (file.size > MAX_PDF_MB * 1024 * 1024) {
@@ -281,6 +257,28 @@ export function InputPanel() {
     setImagePreview(undefined)
   }
 
+  const handleExtractUrl = async () => {
+    if (!urlInput.trim()) return
+    setIsExtracting(true)
+    setExtractError(null)
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlInput.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Extraction failed")
+      setExtracted(data as ExtractResult)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not extract content"
+      setExtractError(msg)
+      toast.error(msg)
+    } finally {
+      setIsExtracting(false)
+    }
+  }
+
   return (
     <div>
       <Tabs defaultValue="url">
@@ -300,25 +298,21 @@ export function InputPanel() {
         </TabsList>
 
         <TabsContent value="url" className="mt-0">
-          <div className="flex gap-2">
-            <Input
-              type="url"
-              placeholder="https://example.com/article..."
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleExtractUrl()}
-              disabled={isExtracting}
-              className="flex-1 text-sm"
-            />
-            <Button
-              onClick={handleExtractUrl}
-              disabled={isExtracting || !urlInput.trim()}
-              size="sm"
-              className="shrink-0"
-            >
-              {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyse"}
-            </Button>
-          </div>
+          <Input
+            type="url"
+            placeholder="https://exemple.com/article..."
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleExtractUrl()}
+            disabled={isExtracting}
+            className="text-sm"
+          />
+          {urlInput.trim() && !extracted && !isExtracting && (
+            <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-[#2D5BE3]" />
+              Lien prêt — clique sur Générer les posts
+            </p>
+          )}
         </TabsContent>
 
         <TabsContent value="pdf" className="mt-0">

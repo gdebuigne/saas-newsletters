@@ -1,4 +1,4 @@
-import type { Network, Tone, Format } from "@/types"
+import type { Network, Tone, Format, Language } from "@/types"
 
 const NETWORK_CONSTRAINTS: Record<Network, string> = {
   linkedin: `
@@ -68,20 +68,30 @@ const FORMAT_INSTRUCTIONS: Record<Format, string> = {
   "hashtags": ["hashtag1", "hashtag2", ...]
 }`,
   thread: "Write a numbered thread. Each tweet/post must stand alone and flow naturally to the next. Number them (1/N, 2/N, etc.).",
-  bullets: "Use bullet points (•) or numbered lists. Each point must be crisp and valuable. Open with a strong hook line before the bullets.",
+  bullets: "Use numbered lists (1. 2. 3.) or emoji-prefixed lines for structure. Each point must be crisp and valuable. Open with a strong hook line before the list. Do NOT use dashes or markdown bullets.",
   narrative: "Tell it as a story. Use a personal 'I' voice even if fictional. Create a narrative arc: situation → complication → insight → resolution.",
 }
 
-export function buildSystemPrompt(network: Network, tone: Tone, format: Format, count: number): string {
+export function buildSystemPrompt(network: Network, tone: Tone, format: Format, count: number, language: Language): string {
+  const langLabel = language === "fr" ? "French" : "English"
   return `You are an expert social media copywriter with deep knowledge of what performs on each platform.
 
 Your task: Generate EXACTLY ${count} DISTINCT social media posts for ${network.toUpperCase()}.
+
+LANGUAGE: Write ALL post content in ${langLabel}. Every word of every post must be in ${langLabel}. Do not mix languages.
 
 ${NETWORK_CONSTRAINTS[network]}
 
 TONE: ${TONE_INSTRUCTIONS[tone]}
 
 FORMAT: ${FORMAT_INSTRUCTIONS[format]}
+
+FORMATTING RULES (STRICTLY ENFORCED):
+- NO markdown: no **bold**, no *italic*, no __underline__, no ~~strikethrough~~
+- NO bullet dashes: never start a line with "- " or "• " unless format explicitly uses bullets
+- NO em dashes (—) as decoration: use plain punctuation (. , : ) instead
+- Write exactly as text appears on a real social media post — plain Unicode text only
+- Line breaks are fine and encouraged for rhythm, but no markdown symbols whatsoever
 
 CRITICAL RULES:
 1. Generate EXACTLY ${count} proposals, each with a DIFFERENT angle or hook — not just slight variations

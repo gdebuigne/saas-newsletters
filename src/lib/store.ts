@@ -1,7 +1,7 @@
 "use client"
 
 import { create } from "zustand"
-import type { ExtractResult, Network, Tone, Format, Proposal } from "@/types"
+import type { ExtractResult, Network, Tone, Format, Proposal, Language } from "@/types"
 
 interface AppState {
   // Extracted content
@@ -14,6 +14,10 @@ interface AppState {
   tone: Tone
   format: Format
   count: number
+  language: Language
+
+  // URL input (shared so GenerateButton can extract-then-generate)
+  urlInput: string
 
   // Generated proposals
   proposals: Proposal[]
@@ -28,6 +32,8 @@ interface AppState {
   setTone: (t: Tone) => void
   setFormat: (f: Format) => void
   setCount: (c: number) => void
+  setLanguage: (l: Language) => void
+  setUrlInput: (s: string) => void
   setProposals: (p: Proposal[]) => void
   updateProposal: (id: string, updated: Proposal) => void
   removeProposal: (id: string) => void
@@ -44,6 +50,8 @@ export const useAppStore = create<AppState>((set) => ({
   tone: "professional",
   format: "classic",
   count: 3,
+  language: "fr",
+  urlInput: "",
   proposals: [],
   isGenerating: false,
   generateError: null,
@@ -55,6 +63,8 @@ export const useAppStore = create<AppState>((set) => ({
   setTone: (t) => set({ tone: t }),
   setFormat: (f) => set({ format: f }),
   setCount: (c) => set({ count: c }),
+  setLanguage: (l) => set({ language: l }),
+  setUrlInput: (s) => set({ urlInput: s }),
   setProposals: (p) => set({ proposals: p }),
   updateProposal: (id, updated) =>
     set((s) => ({ proposals: s.proposals.map((p) => (p.id === id ? updated : p)) })),
