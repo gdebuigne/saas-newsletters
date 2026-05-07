@@ -6,7 +6,19 @@ const VALID_NETWORKS = ["linkedin", "instagram", "twitter", "threads", "facebook
 const VALID_TONES = ["professional", "inspiring", "humorous", "educational", "provocative", "storytelling"]
 const VALID_FORMATS = ["classic", "carousel", "thread", "bullets", "narrative"]
 
+function isKeyMissing() {
+  const key = process.env.ANTHROPIC_API_KEY
+  return !key || key.startsWith("sk-ant-your")
+}
+
 export async function POST(req: NextRequest) {
+  if (isKeyMissing()) {
+    return NextResponse.json(
+      { error: "Anthropic API key not configured. Add ANTHROPIC_API_KEY=sk-ant-... to .env.local and restart the dev server." },
+      { status: 503 }
+    )
+  }
+
   let body: GenerateRequest
   try {
     body = await req.json()
