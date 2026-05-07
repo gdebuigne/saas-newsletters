@@ -1,12 +1,9 @@
 "use client"
 
-import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Sparkles } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import type { Network, Tone, Format, Proposal } from "@/types"
+import type { Network, Tone, Format } from "@/types"
 
 const NETWORKS: { id: Network; label: string; color: string; bg: string; icon: string }[] = [
   { id: "linkedin", label: "LinkedIn", color: "text-[#0A66C2]", bg: "bg-[#E8F0FA] border-[#0A66C2]/30", icon: "in" },
@@ -51,11 +48,7 @@ const FORMATS_BY_NETWORK: Record<Network, { id: Format; label: string }[]> = {
 }
 
 export function SettingsPanel() {
-  const {
-    network, tone, format, count, extracted,
-    isGenerating, setNetwork, setTone, setFormat, setCount,
-    setProposals, setIsGenerating, setGenerateError,
-  } = useAppStore()
+  const { network, tone, format, count, setNetwork, setTone, setFormat, setCount } = useAppStore()
 
   const availableFormats = FORMATS_BY_NETWORK[network]
   const validFormat = availableFormats.some((f) => f.id === format) ? format : availableFormats[0].id
@@ -64,42 +57,6 @@ export function SettingsPanel() {
     setNetwork(n)
     const formats = FORMATS_BY_NETWORK[n]
     if (!formats.some((f) => f.id === format)) setFormat(formats[0].id)
-  }
-
-  const handleGenerate = async () => {
-    if (!extracted) {
-      toast.error("Please extract content first")
-      return
-    }
-
-    setIsGenerating(true)
-    setGenerateError(null)
-
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: `${extracted.title}\n\n${extracted.summary}\n\n${extracted.body}`,
-          sourceUrl: extracted.sourceUrl,
-          network,
-          tone,
-          format: validFormat,
-          count,
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Generation failed")
-      setProposals((data as { proposals: Proposal[] }).proposals)
-      toast.success(`${data.proposals.length} posts generated!`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Generation failed"
-      setGenerateError(msg)
-      toast.error(msg)
-    } finally {
-      setIsGenerating(false)
-    }
   }
 
   return (
@@ -210,23 +167,6 @@ export function SettingsPanel() {
         </div>
       </div>
 
-      <Button
-        onClick={handleGenerate}
-        disabled={isGenerating || !extracted}
-        className="w-full gap-2 h-11 text-sm font-semibold"
-      >
-        {isGenerating ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Generating...
-          </>
-        ) : (
-          <>
-            <Sparkles className="w-4 h-4" />
-            Generate posts
-          </>
-        )}
-      </Button>
     </div>
   )
 }
