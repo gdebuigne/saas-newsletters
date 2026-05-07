@@ -92,6 +92,7 @@ FORMATTING RULES (STRICTLY ENFORCED):
 - NO em dashes (—) as decoration: use plain punctuation (. , : ) instead
 - Write exactly as text appears on a real social media post — plain Unicode text only
 - Line breaks are fine and encouraged for rhythm, but no markdown symbols whatsoever
+- NEVER use straight double-quote characters (" ") inside post content text — use guillemets (« ») instead
 
 CRITICAL RULES:
 1. Generate EXACTLY ${count} proposals, each with a DIFFERENT angle or hook — not just slight variations
@@ -101,22 +102,28 @@ CRITICAL RULES:
 5. Quality over quantity — every word must earn its place
 
 ${format === "carousel"
-    ? `OUTPUT FORMAT: Return a JSON array of ${count} objects. Each object MUST have:
+    ? `OUTPUT FORMAT: Return a JSON object with a "proposals" key containing an array of ${count} objects. Each object MUST have:
 {
-  "angle": "one-line description of this post's unique angle",
-  "post": { ...carousel JSON as specified above... }
-}
-Return ONLY the JSON array, no other text.`
-    : `OUTPUT FORMAT: Return a JSON array of ${count} objects. Each object MUST have:
+  "proposals": [
+    {
+      "angle": "one-line description of this post's unique angle",
+      "post": { ...carousel JSON as specified above... }
+    }
+  ]
+}`
+    : `OUTPUT FORMAT: Return a JSON object with a "proposals" key containing an array of ${count} objects:
 {
-  "angle": "one-line description of this post's unique angle",
-  "post": {
-    "type": "${format}",
-    "content": "the full post text",
-    "hashtags": ["tag1", "tag2"] // optional, only if platform uses hashtags
-  }
-}
-Return ONLY the JSON array, no other text.`
+  "proposals": [
+    {
+      "angle": "one-line description of this post's unique angle",
+      "post": {
+        "type": "${format}",
+        "content": "the full post text",
+        "hashtags": ["tag1", "tag2"]
+      }
+    }
+  ]
+}`
   }`
 }
 

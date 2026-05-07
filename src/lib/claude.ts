@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import { jsonrepair } from "jsonrepair"
 import { buildSystemPrompt, buildUserPrompt } from "./prompts"
 import type { Network, Tone, Format, Proposal, GeneratedPost, Language } from "@/types"
 
@@ -15,45 +16,27 @@ function getClient(): OpenAI {
   })
 }
 
-function fixControlChars(str: string): string {
-  let inString = false
-  let escaped = false
-  let result = ""
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i]
-    const code = str.charCodeAt(i)
-    if (escaped) { escaped = false; result += char; continue }
-    if (char === "\\") { escaped = true; result += char; continue }
-    if (char === '"') { inString = !inString; result += char; continue }
-    if (inString && code < 0x20) {
-      if (char === "\n") result += "\\n"
-      else if (char === "\r") result += "\\r"
-      else if (char === "\t") result += "\\t"
-      continue
-    }
-    result += char
-  }
-  return result
-}
-
 function parseProposals(raw: string, network: Network, tone: Tone, format: Format): Proposal[] {
   const cleaned = raw
     .replace(/```json\n?/g, "")
     .replace(/```\n?/g, "")
     .trim()
 
-  const tryParse = (s: string) => JSON.parse(fixControlChars(s))
-
-  let parsed: unknown
+  let root: unknown
   try {
-    parsed = tryParse(cleaned)
+    root = JSON.parse(cleaned)
   } catch {
-    const match = cleaned.match(/\[[\s\S]+\]/)
-    if (!match) throw new Error("The AI returned an invalid response. Please try again.")
-    parsed = tryParse(match[0])
+    try {
+      root = JSON.parse(jsonrepair(cleaned))
+    } catch (e) {
+      console.error("[parseProposals] failed:", (e as Error).message, "| first 200:", cleaned.slice(0, 200))
+      throw new Error("The AI returned an invalid response. Please try again.")
+    }
   }
 
-  if (!Array.isArray(parsed)) throw new Error("Expected JSON array from AI")
+  // Accept either { proposals: [...] } or a bare array
+  const list = (root as { proposals?: unknown[] }).proposals ?? (Array.isArray(root) ? root : null)
+  if (!list) throw new Error("Expected JSON array from AI")
 
   const stripMarkdown = (text: string) =>
     text
@@ -64,7 +47,7 @@ function parseProposals(raw: string, network: Network, tone: Tone, format: Forma
       .replace(/^- /gm, "")
       .replace(/^• /gm, "")
 
-  return parsed.map((item: { angle: string; post: GeneratedPost }, idx: number) => {
+  return (list as { angle: string; post: GeneratedPost }[]).map((item, idx: number) => {
     const post = item.post as GeneratedPost
 
     if (post.type !== "carousel" && (post as import("@/types").ClassicPost).content) {
@@ -126,6 +109,7 @@ export async function generatePosts({
     const completion = await client.chat.completions.create({
       model: TEXT_MODEL,
       max_tokens: 4096,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -138,7 +122,7 @@ export async function generatePosts({
     return parseProposals(text, network, tone, format)
   } catch (err) {
     const msg = (err as Error).message ?? ""
-    if (msg.includes(".env.local") || msg.includes("JSON") || msg.includes("invalid response")) throw err
+    if (msg.includes(".env.local") || msg.includes("invalid response") || msg.includes("Please try again")) throw err
     handleApiError(err)
   }
 }
