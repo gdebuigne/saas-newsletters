@@ -2,9 +2,36 @@ import * as cheerio from "cheerio"
 import OpenAI from "openai"
 import type { ExtractResult } from "@/types"
 
-const VISION_MODEL = "pixtral-large-latest"
+const VISION_MODEL = "pixtral-12b-2409"   // smaller model = higher rate limits
+const MAX_IMAGE_PX = 1024                  // resize before sending to save tokens
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const
 type SupportedImageType = typeof SUPPORTED_IMAGE_TYPES[number]
+
+async function compressImage(buffer: Buffer): Promise<{ data: Buffer; mimeType: "image/jpeg" }> {
+  const sharp = (await import("sharp")).default
+  const data = await sharp(buffer)
+    .resize(MAX_IMAGE_PX, MAX_IMAGE_PX, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 82 })
+    .toBuffer()
+  return { data, mimeType: "image/jpeg" }
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const status = (err as { status?: number }).status
+      if (status === 429 && attempt < retries - 1) {
+        // Exponential backoff: 3s, 8s
+        await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)))
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error("Max retries exceeded")
+}
 
 function getMistralClient(): OpenAI {
   const key = process.env.MISTRAL_API_KEY
@@ -161,33 +188,34 @@ export function isSupportedImageType(mimeType: string): mimeType is SupportedIma
 
 export async function extractFromImage(buffer: Buffer, mimeType: SupportedImageType): Promise<ExtractResult> {
   const client = getMistralClient()
-  const base64 = buffer.toString("base64")
 
-  try {
-    const completion = await client.chat.completions.create({
-      model: VISION_MODEL,
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}` },
-            },
-            {
-              type: "text",
-              text: `Analyze this image thoroughly. Extract all visible text (captions, post content, quotes, headlines, overlaid text). Identify the main topic, key message, and any notable data points.
+  // Compress + resize before sending to reduce token usage
+  const { data: compressed, mimeType: compressedType } = await compressImage(buffer)
+  const base64 = compressed.toString("base64")
+
+  const prompt = `Analyze this image thoroughly. Extract all visible text (captions, post content, quotes, headlines, overlaid text). Identify the main topic, key message, and any notable data points.
 
 Respond in this exact format:
 TITLE: [main subject or headline, 10 words max]
 SUMMARY: [1–2 sentence summary of the core message]
-CONTENT: [detailed description with ALL visible text, context, key takeaways, statistics or quotes, and what makes this content interesting]`,
-            },
-          ],
-        },
-      ],
-    })
+CONTENT: [detailed description with ALL visible text, context, key takeaways, statistics or quotes, and what makes this content interesting]`
+
+  try {
+    const completion = await withRetry(() =>
+      client.chat.completions.create({
+        model: VISION_MODEL,
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: `data:${compressedType};base64,${base64}` } },
+              { type: "text", text: prompt },
+            ],
+          },
+        ],
+      })
+    )
 
     const text = completion.choices[0]?.message?.content ?? ""
 
@@ -204,7 +232,7 @@ CONTENT: [detailed description with ALL visible text, context, key takeaways, st
   } catch (err) {
     const e = err as { status?: number; message?: string }
     if (e.status === 401) throw new Error("Invalid Mistral API key. Check MISTRAL_API_KEY in .env.local.")
-    if (e.status === 429) throw new Error("Rate limit reached. Wait a moment and try again.")
+    if (e.status === 429) throw new Error("Mistral rate limit reached after 3 attempts. Wait 1 minute and try again.")
     throw new Error(e.message ?? "Image analysis failed")
   }
 }
