@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { extractFromUrl, extractFromPdf } from "@/lib/extractor"
+import { extractFromUrl, extractFromPdf, extractFromImage, isSupportedImageType } from "@/lib/extractor"
 
-const MAX_PDF_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024  // 5MB (Claude Vision limit)
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,20 +16,38 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "No file provided" }, { status: 400 })
       }
 
-      if (file.size > MAX_PDF_SIZE) {
-        return NextResponse.json(
-          { error: `File too large. Maximum size is 10MB (received ${(file.size / 1024 / 1024).toFixed(1)}MB)` },
-          { status: 413 }
-        )
+      const mimeType = file.type
+
+      // Image upload
+      if (isSupportedImageType(mimeType)) {
+        if (file.size > MAX_IMAGE_SIZE) {
+          return NextResponse.json(
+            { error: `Image too large. Maximum size is 5MB (received ${(file.size / 1024 / 1024).toFixed(1)}MB)` },
+            { status: 413 }
+          )
+        }
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const result = await extractFromImage(buffer, mimeType)
+        return NextResponse.json(result)
       }
 
-      if (!file.type.includes("pdf") && !file.name.endsWith(".pdf")) {
-        return NextResponse.json({ error: "Only PDF files are supported" }, { status: 400 })
+      // PDF upload
+      if (mimeType.includes("pdf") || file.name.endsWith(".pdf")) {
+        if (file.size > MAX_FILE_SIZE) {
+          return NextResponse.json(
+            { error: `File too large. Maximum size is 10MB (received ${(file.size / 1024 / 1024).toFixed(1)}MB)` },
+            { status: 413 }
+          )
+        }
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const result = await extractFromPdf(buffer)
+        return NextResponse.json(result)
       }
 
-      const buffer = Buffer.from(await file.arrayBuffer())
-      const result = await extractFromPdf(buffer)
-      return NextResponse.json(result)
+      return NextResponse.json(
+        { error: "Unsupported file type. Please upload a PDF or an image (PNG, JPG, WEBP, GIF)." },
+        { status: 400 }
+      )
     }
 
     // JSON body with URL
@@ -42,6 +61,7 @@ export async function POST(req: NextRequest) {
     const result = await extractFromUrl(url)
     return NextResponse.json(result)
   } catch (err) {
+    console.error("[extract]", err)
     const message = err instanceof Error ? err.message : "Extraction failed"
     return NextResponse.json({ error: message }, { status: 422 })
   }

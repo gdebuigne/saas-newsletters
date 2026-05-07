@@ -1,5 +1,11 @@
 import * as cheerio from "cheerio"
+import Anthropic from "@anthropic-ai/sdk"
 import type { ExtractResult } from "@/types"
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const IMAGE_ANALYSIS_MODEL = "claude-sonnet-4-20250514"
+const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const
+type SupportedImageType = typeof SUPPORTED_IMAGE_TYPES[number]
 
 const UNWANTED_SELECTORS = [
   "nav", "header", "footer", "aside", "script", "style", "noscript",
@@ -101,6 +107,52 @@ export async function extractFromUrl(url: string): Promise<ExtractResult> {
     }
     throw err
   }
+}
+
+export function isSupportedImageType(mimeType: string): mimeType is SupportedImageType {
+  return SUPPORTED_IMAGE_TYPES.includes(mimeType as SupportedImageType)
+}
+
+export async function extractFromImage(buffer: Buffer, mimeType: SupportedImageType): Promise<ExtractResult> {
+  const base64 = buffer.toString("base64")
+
+  const message = await anthropic.messages.create({
+    model: IMAGE_ANALYSIS_MODEL,
+    max_tokens: 1024,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mimeType, data: base64 },
+          },
+          {
+            type: "text",
+            text: `Analyze this image thoroughly. Extract all visible text (caption, post content, quotes, headlines, body text, overlaid text). Identify the main topic, key message, and any notable data points or insights.
+
+Respond in this exact format:
+TITLE: [the main subject or headline in 10 words or fewer]
+SUMMARY: [a concise 1–2 sentence summary of the core message]
+CONTENT: [a detailed description including ALL text visible in the image, the context, key takeaways, any statistics or quotes, and what makes this content interesting or shareable]`,
+          },
+        ],
+      },
+    ],
+  })
+
+  const text = message.content.find((c) => c.type === "text")?.text ?? ""
+
+  const titleMatch = text.match(/^TITLE:\s*(.+)$/m)
+  const summaryMatch = text.match(/^SUMMARY:\s*(.+)$/m)
+  const contentMatch = text.match(/^CONTENT:\s*([\s\S]+)$/m)
+
+  const title = titleMatch?.[1]?.trim() ?? "Image Content"
+  const summary = summaryMatch?.[1]?.trim() ?? ""
+  const body = contentMatch?.[1]?.trim() ?? text
+  const wordCount = body.split(/\s+/).filter(Boolean).length
+
+  return { title, summary, body, wordCount }
 }
 
 export async function extractFromPdf(buffer: Buffer): Promise<ExtractResult> {
